@@ -1,8 +1,6 @@
 package satd.visitors;
 
-import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.comments.BlockComment;
-import com.github.javaparser.ast.comments.CommentsCollection;
 import com.github.javaparser.ast.comments.LineComment;
 import com.github.javaparser.ast.visitor.VoidVisitorAdapter;
 

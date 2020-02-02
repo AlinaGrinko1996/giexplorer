@@ -14,6 +14,8 @@ import org.eclipse.jgit.revwalk.RevWalk;
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder;
 import org.eclipse.jgit.treewalk.AbstractTreeIterator;
 import org.eclipse.jgit.treewalk.CanonicalTreeParser;
+import org.eclipse.jgit.treewalk.TreeWalk;
+import org.eclipse.jgit.treewalk.filter.PathFilter;
 import org.eclipse.jgit.util.io.DisabledOutputStream;
 import satd.parser.JavaParserUtils;
 
@@ -37,6 +39,7 @@ public class JGitMain {
         try (Git result = Git.cloneRepository()
                 .setURI(gitUrl)
                 .setDirectory(localPath)
+                .setCloneAllBranches(true)
                 .call()) {
             // Note: the call() returns an opened repository already which needs to be closed to avoid file handle leaks!
             System.out.println("Having repository: " + result.getRepository().getDirectory());
@@ -74,9 +77,9 @@ public class JGitMain {
                 int count = 0;
                 for (RevCommit commit : commits) {
                     System.out.println("LogCommit: " + commit);
-                    diffCommit(commit.getName(), repository);
-                   // exploreCommit(repository, git, commit);
-
+                    //diffCommit(commit.getName(), repository);
+                    List<String> changedFiles = exploreCommit(repository, git, commit);
+                    accessingFiles(commit, repository, changedFiles);
                     count++;
                 }
                 System.out.println(count);
@@ -90,51 +93,55 @@ public class JGitMain {
         }
     }
 
-//    public static void exploreCommit(Repository repository, Git git, RevCommit commit) throws GitAPIException, IOException {
-//        if (commit.getParentCount() > 0) {
-//            listDiff(repository, git, commit.getParent(commit.getParentCount() - 1).getName(), commit.getName());
-//            System.out.println("Parent of " +commit.getName()+ " is " + commit.getParent(commit.getParentCount() - 1).getName());
-//        }
-//    }
+    public static List<String> exploreCommit(Repository repository, Git git, RevCommit commit) throws GitAPIException, IOException {
+        if (commit.getParentCount() > 0) {
+            System.out.println("Parent of " + commit.getName()+ " is " + commit.getParent(commit.getParentCount() - 1).getName());
+            return listDiff(repository, git, commit.getParent(commit.getParentCount() - 1).getName(), commit.getName());
+        } //todo else = all files
+        return new ArrayList<>();
+    }
 
-//    private static void listDiff(Repository repository, Git git, String oldCommit, String newCommit) throws GitAPIException, IOException {
-//        final List<DiffEntry> diffs = git.diff()
-//                .setOldTree(prepareTreeParser(repository, oldCommit))
-//                .setNewTree(prepareTreeParser(repository, newCommit))
-//                .call();
-//
-//        System.out.println("Found: " + diffs.size() + " differences");
-//        try (DiffFormatter diffFormatter = new DiffFormatter(DisabledOutputStream.INSTANCE)) {
-//
-//            diffFormatter.setRepository(repository);
-//            diffFormatter.setDiffComparator(RawTextComparator.DEFAULT);
-//            diffFormatter.setDetectRenames(true);
-//            for (DiffEntry diff : diffs) {
-//                FileHeader fileHeader = diffFormatter.toFileHeader(diff);
-//                System.out.println("Diff: " + diff.getChangeType() + ": " +
-//                        (diff.getOldPath().equals(diff.getNewPath()) ? diff.getNewPath() : diff.getOldPath() + " -> " + diff.getNewPath()));
-//                System.out.println("Changed: " + fileHeader.toEditList());
-//            }
-//        }
-//    }
+    private static List<String> listDiff(Repository repository, Git git, String oldCommit, String newCommit) throws GitAPIException, IOException {
+        final List<DiffEntry> diffs = git.diff()
+                .setOldTree(prepareTreeParser(repository, oldCommit))
+                .setNewTree(prepareTreeParser(repository, newCommit))
+                .call();
+        List<String> changedFiles = new ArrayList<>();
 
-//    private static AbstractTreeIterator prepareTreeParser(Repository repository, String objectId) throws IOException {
-//        // from the commit we can build the tree which allows us to construct the TreeParser
-//        //noinspection Duplicates
-//        try (RevWalk walk = new RevWalk(repository)) {
-//            RevCommit commit = walk.parseCommit(repository.resolve(objectId));
-//            RevTree tree = walk.parseTree(commit.getTree().getId());
-//
-//            CanonicalTreeParser treeParser = new CanonicalTreeParser();
-//            try (ObjectReader reader = repository.newObjectReader()) {
-//                treeParser.reset(reader, tree.getId());
-//            }
-//
-//            walk.dispose();
-//
-//            return treeParser;
-//        }
-//    }
+        System.out.println("Found: " + diffs.size() + " differences");
+        try (DiffFormatter diffFormatter = new DiffFormatter(DisabledOutputStream.INSTANCE)) {
+
+            diffFormatter.setRepository(repository);
+            diffFormatter.setDiffComparator(RawTextComparator.DEFAULT);
+            diffFormatter.setDetectRenames(true);
+            for (DiffEntry diff : diffs) {
+                FileHeader fileHeader = diffFormatter.toFileHeader(diff);
+                System.out.println("Diff: " + diff.getChangeType() + ": " +
+                        (diff.getOldPath().equals(diff.getNewPath()) ? diff.getNewPath() : diff.getOldPath() + " -> " + diff.getNewPath()));
+                System.out.println("Changed: " + fileHeader.toEditList());
+                changedFiles.add(diff.getNewPath());
+            }
+        }
+        return changedFiles;
+    }
+
+    private static AbstractTreeIterator prepareTreeParser(Repository repository, String objectId) throws IOException {
+        // from the commit we can build the tree which allows us to construct the TreeParser
+        //noinspection Duplicates
+        try (RevWalk walk = new RevWalk(repository)) {
+            RevCommit commit = walk.parseCommit(repository.resolve(objectId));
+            RevTree tree = walk.parseTree(commit.getTree().getId());
+
+            CanonicalTreeParser treeParser = new CanonicalTreeParser();
+            try (ObjectReader reader = repository.newObjectReader()) {
+                treeParser.reset(reader, tree.getId());
+            }
+
+            walk.dispose();
+
+            return treeParser;
+        }
+    }
 
     public static void main(String... args) throws IOException {
       //  String url = "https://github.com/apache/accumulo.git";
@@ -159,7 +166,7 @@ public class JGitMain {
         String temp = getDiffOfCommit(newCommit, repo, git);
         System.out.println(temp);
 
-        JavaParserUtils.getAddedComments(temp);
+        JavaParserUtils.getAddedComments(temp, "");
 
     }
     //Helper gets the diff as a string.
@@ -237,6 +244,34 @@ public class JGitMain {
             previousCommit = commit;
         }
         git.close();
+    }
+
+    public static void accessingFiles(RevCommit commit, Repository repository, List<String> changedFiles) throws IOException {
+        RevTree tree = commit.getTree();
+        System.out.println("Having tree: " + tree);
+
+        for (int i = 0; i < changedFiles.size(); i++) {
+            OutputStream stream = new ByteArrayOutputStream();
+            if (!changedFiles.get(i).equals("/dev/null")) {
+                try (TreeWalk treeWalk = new TreeWalk(repository)) {
+                    treeWalk.addTree(tree);
+                    treeWalk.setRecursive(true);
+                    treeWalk.setFilter(PathFilter.create(changedFiles.get(i)));
+                    if (!treeWalk.next()) {
+                        throw new IllegalStateException("Did not find expected file " + changedFiles.get(i));
+                    }
+
+                    ObjectId objectId = treeWalk.getObjectId(0);
+                    ObjectLoader loader = repository.open(objectId);
+
+                    // and then one can the loader to read the file
+                    loader.copyTo(stream);
+                }
+            }
+            JavaParserUtils.getAddedComments(stream.toString(), changedFiles.get(i));
+            stream.close();
+        }
+      //  return stream;
     }
 
 
