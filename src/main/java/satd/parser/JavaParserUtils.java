@@ -4,19 +4,27 @@ import com.github.javaparser.ParseProblemException;
 import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.visitor.VoidVisitor;
+import entities.Comment;
 import satd.visitors.CodeCommentsVisitor;
+
+import java.util.HashSet;
 
 public class JavaParserUtils {
     public static void getAddedComments(String filename, String content, String commit) {
-        try {
-            CompilationUnit compilationUnit = StaticJavaParser.parse(content);
+        if (filename.contains(".java")) {
+            try {
+                CompilationUnit compilationUnit = StaticJavaParser.parse(content);
 
-            VoidVisitor codeCommentsVisitor = new CodeCommentsVisitor(filename, commit);
-            codeCommentsVisitor.visit(compilationUnit, null);
+                HashSet<Comment> comments = new HashSet<>();
+                //  List<Comment> comments = new ArrayList<>();
+                VoidVisitor codeCommentsVisitor = new CodeCommentsVisitor(filename, commit, comments);
+                codeCommentsVisitor.visit(compilationUnit, null);
 
-        } catch (ParseProblemException ex) {
-            System.out.println("Parsing of " + filename + "performed with exception");
-            System.out.println("Parsing of %s performed with exception");
+                if (comments.size() > 0)
+                    System.out.println(comments);
+            } catch (ParseProblemException ex) {
+                System.out.println("Parsing of " + filename + "performed with exception");
+            }
         }
     }
 }

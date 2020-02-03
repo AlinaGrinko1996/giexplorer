@@ -1,14 +1,9 @@
 package utils;
 
-import org.eclipse.jgit.api.Git;
-import org.eclipse.jgit.api.errors.GitAPIException;
-import org.eclipse.jgit.api.errors.InvalidRemoteException;
-import org.eclipse.jgit.api.errors.TransportException;
-import org.eclipse.jgit.diff.DiffEntry;
-import org.eclipse.jgit.lib.ObjectId;
-import org.eclipse.jgit.lib.ObjectLoader;
-import org.eclipse.jgit.lib.ObjectReader;
-import org.eclipse.jgit.lib.Repository;
+import com.google.common.collect.Lists;import org.eclipse.jgit.api.Git;
+import org.eclipse.jgit.api.ListBranchCommand;
+import org.eclipse.jgit.api.errors.GitAPIException;import org.eclipse.jgit.diff.DiffEntry;
+import org.eclipse.jgit.lib.*;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.revwalk.RevTree;
 import org.eclipse.jgit.revwalk.RevWalk;
@@ -16,7 +11,6 @@ import org.eclipse.jgit.treewalk.AbstractTreeIterator;
 import org.eclipse.jgit.treewalk.CanonicalTreeParser;
 import org.eclipse.jgit.treewalk.TreeWalk;
 import org.eclipse.jgit.treewalk.filter.PathFilter;
-import satd.parser.JavaParserUtils;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -27,19 +21,19 @@ import java.util.HashMap;
 import java.util.List;
 
 public class JGitUtils {
-    public static Repository cloneRepository(String repoUrl) throws IOException {
+    public static Git cloneRepository(String repoUrl) throws IOException {
         File tempPath = File.createTempFile("TestRepository", "");
         if (!tempPath.delete()) {
             throw new IOException("Not deletable temp file " + tempPath);
         }
         try (Git result = Git.cloneRepository()
+                .setCloneAllBranches(true)
                 .setURI(repoUrl)
                 .setDirectory(tempPath)
-                .setCloneAllBranches(true)
                 .call()) {
 
             System.out.println("Repository cloned " + result.getRepository().getDirectory());
-            return result.getRepository();
+            return result;
         } catch (GitAPIException e) {
             e.printStackTrace();
         }
@@ -118,17 +112,23 @@ public class JGitUtils {
 
     public static HashMap<String, HashMap<String, String>> getAllFilesChangedInCommits(String gitUrl) throws IOException,
             GitAPIException {
-        Repository repository = JGitUtils.cloneRepository(gitUrl);
+        Git git = JGitUtils.cloneRepository(gitUrl);
         HashMap<String, HashMap<String, String>> commitAndFilesChanged = new HashMap<>();
-        assert repository != null;
+        Repository repository = git.getRepository();
+        List<Ref> branches = git.branchList().setListMode(ListBranchCommand.ListMode.ALL).call();
 
-        Git git = new Git(repository);
+        for (Ref branch : branches) {
+            String branchName = branch.getName();
 
-        Iterable<RevCommit> commits = git.log().all().call();
-        for (RevCommit commit : commits) {
-            List<String> changedFiles = JGitUtils.exploreCommit(repository, git, commit);
-            HashMap<String, String> fileAndItsContent = JGitUtils.accessingFilesOfCommit(commit, repository, changedFiles);
-            commitAndFilesChanged.put(commit.getName(), fileAndItsContent);
+            Iterable<RevCommit> commits = git.log().add(repository.resolve(branchName)).call();
+            List<RevCommit> commitsList = Lists.newArrayList(commits.iterator());
+
+            for (RevCommit commit : commitsList) {
+                List<String> changedFiles = exploreCommit(repository, git, commit);
+                HashMap<String, String> fileAndItsContent = accessingFilesOfCommit(commit, repository, changedFiles);
+                commitAndFilesChanged.put(commit.getName(), fileAndItsContent);
+                System.out.println(branchName + " -> " + commit.getName());
+            }
         }
         return commitAndFilesChanged;
     }
