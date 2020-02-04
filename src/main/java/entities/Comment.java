@@ -14,6 +14,14 @@ public class Comment {
         this.commentText = commentText;
     }
 
+    public String getFileName() {
+        return fileName;
+    }
+
+    public void setFileName(String fileName) {
+        this.fileName = fileName;
+    }
+
     public int getLineBegin() {
         return lineBegin;
     }

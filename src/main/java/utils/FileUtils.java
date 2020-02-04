@@ -1,5 +1,7 @@
 package utils;
 
+import entities.Comment;
+
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -7,14 +9,18 @@ import java.util.List;
 import java.util.Scanner;
 
 public class FileUtils {
-    private static String SATD_FILENAME = "src/main/resources/SATDKeywords.txt";
-    private static String REPOS_FILENAME = "src/main/resources/repositories.txt";
+    private static String SATD_FILENAME = "src/main/resources/SATDKeywords";
+    private static String REPOS_FILENAME = "src/main/resources/repositories";
 
-    public List<String> getSATDKeywords() {
+    public static List<String> getSATDKeywords() {
         return readFile(SATD_FILENAME);
     }
 
-    private List<String> readFile(String filename) {
+    public static List<String> getRepositories() {
+        return readFile(REPOS_FILENAME);
+    }
+
+    private static List<String> readFile(String filename) {
         List<String> result = new ArrayList<>();
         try {
             FileInputStream fileInputStream = new FileInputStream(filename);
@@ -29,4 +35,8 @@ public class FileUtils {
         }
         return result;
     }
+
+//    public static void printReport(int allComments, List<Comment> SATDComments) {
+//        return readFile(REPOS_FILENAME);
+//    }
 }

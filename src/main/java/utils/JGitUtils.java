@@ -2,11 +2,15 @@ package utils;
 
 import com.google.common.collect.Lists;import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.ListBranchCommand;
-import org.eclipse.jgit.api.errors.GitAPIException;import org.eclipse.jgit.diff.DiffEntry;
+import org.eclipse.jgit.api.errors.GitAPIException;
+import org.eclipse.jgit.api.errors.JGitInternalException;
+import org.eclipse.jgit.diff.DiffEntry;
+import org.eclipse.jgit.errors.LargeObjectException;
 import org.eclipse.jgit.lib.*;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.revwalk.RevTree;
 import org.eclipse.jgit.revwalk.RevWalk;
+import org.eclipse.jgit.storage.file.FileRepositoryBuilder;
 import org.eclipse.jgit.treewalk.AbstractTreeIterator;
 import org.eclipse.jgit.treewalk.CanonicalTreeParser;
 import org.eclipse.jgit.treewalk.TreeWalk;
@@ -21,11 +25,20 @@ import java.util.HashMap;
 import java.util.List;
 
 public class JGitUtils {
+    static int CHUNK = 100;
+    public static List<String> checkedCommits = new ArrayList<>();
+    public static boolean chunkSizeOverloaded = true;
+
     public static Git cloneRepository(String repoUrl) throws IOException {
-        File tempPath = File.createTempFile("TestRepository", "");
-        if (!tempPath.delete()) {
-            throw new IOException("Not deletable temp file " + tempPath);
+       // File tempPath = File.createTempFile("TestRepository", "");
+        String[] name = repoUrl.split("/");
+        File tempPath = new File("repositories/" + name[name.length - 1]);
+        if (tempPath.exists() && tempPath.isDirectory()) {
+            return openJGitRepository(tempPath);
         }
+//        if (!tempPath.delete()) {
+//            throw new IOException("Not deletable temp file " + tempPath);
+//        }
         try (Git result = Git.cloneRepository()
                 .setCloneAllBranches(true)
                 .setURI(repoUrl)
@@ -40,12 +53,30 @@ public class JGitUtils {
         return null;
     }
 
+    public static Git openJGitRepository(File directory) throws IOException {
+        FileRepositoryBuilder builder = new FileRepositoryBuilder();
+        Repository repository = builder
+                .readEnvironment()
+                .findGitDir(directory)
+                .build();
+        return new Git(repository);
+    }
+
     public static List<String> getListOfChangedFiles(Repository repository, Git git, String oldCommit, String newCommit)
             throws GitAPIException, IOException {
-        final List<DiffEntry> diffs = git.diff()
-                .setOldTree(getTreeParser(repository, oldCommit))
-                .setNewTree(getTreeParser(repository, newCommit))
-                .call();
+        System.out.println(oldCommit + " -> " + newCommit);
+
+        List<DiffEntry> diffs = new ArrayList<>();
+        try {
+            diffs = git.diff()
+                    .setOldTree(getTreeParser(repository, oldCommit))
+                    .setNewTree(getTreeParser(repository, newCommit))
+                    .call(); //todo here Java heap exception - out of memory
+            // Missing blob c306e1647d4afecd5737d6026b256b973c184726
+        } catch (OutOfMemoryError | LargeObjectException | JGitInternalException ex) {
+            System.out.println("!!!!!!!!! Problems with comparing (old, new) (" + oldCommit + ", " + newCommit + ")");
+            return new ArrayList<>();
+        }
         List<String> changedFiles = new ArrayList<>();
         for (DiffEntry diff : diffs) {
             changedFiles.add(diff.getNewPath());
@@ -86,7 +117,7 @@ public class JGitUtils {
                     }
 
                     ObjectId objectId = treeWalk.getObjectId(0);
-                    ObjectLoader loader = repository.open(objectId);
+                    ObjectLoader loader = repository.open(objectId); //Missing unknown 7476a425c22d220291324a1060800d9801ca82c7
 
                     loader.copyTo(stream);
                 }
@@ -117,19 +148,42 @@ public class JGitUtils {
         Repository repository = git.getRepository();
         List<Ref> branches = git.branchList().setListMode(ListBranchCommand.ListMode.ALL).call();
 
-        for (Ref branch : branches) {
-            String branchName = branch.getName();
+        branches.parallelStream().forEach(branch -> {
+            if (commitAndFilesChanged.size() < CHUNK) {
+                String branchName = branch.getName();
 
-            Iterable<RevCommit> commits = git.log().add(repository.resolve(branchName)).call();
-            List<RevCommit> commitsList = Lists.newArrayList(commits.iterator());
+                Iterable<RevCommit> commits = null;
+                try {
+                    commits = git.log().add(repository.resolve(branchName)).call();
+                } catch (GitAPIException | IOException e) {
+                    e.printStackTrace();
+                }
+                List<RevCommit> commitsList = Lists.newArrayList(commits.iterator());
 
-            for (RevCommit commit : commitsList) {
-                List<String> changedFiles = exploreCommit(repository, git, commit);
-                HashMap<String, String> fileAndItsContent = accessingFilesOfCommit(commit, repository, changedFiles);
-                commitAndFilesChanged.put(commit.getName(), fileAndItsContent);
-                System.out.println(branchName + " -> " + commit.getName());
+                commitsList.parallelStream().forEach(commit -> {
+                    if (commitAndFilesChanged.size() < CHUNK) {
+                        if (!checkedCommits.contains(commit.getName())) {
+                            List<String> changedFiles = null;
+                            HashMap<String, String> fileAndItsContent = null;
+                            try {
+                                changedFiles = exploreCommit(repository, git, commit);
+                                fileAndItsContent = accessingFilesOfCommit(commit, repository, changedFiles);
+                            } catch (GitAPIException | IOException e) {
+                                e.printStackTrace();
+                            }
+                            commitAndFilesChanged.put(commit.getName(), fileAndItsContent);
+                            checkedCommits.add(commit.getName());
+                            System.out.println(branchName + " -> " + commit.getName());
+                            chunkSizeOverloaded = false;
+                        }
+                    } else {
+                        chunkSizeOverloaded = true;
+                    }
+                });
+            } else {
+                chunkSizeOverloaded = true;
             }
-        }
+        });
         return commitAndFilesChanged;
     }
 }

@@ -13,14 +13,14 @@ import java.util.List;
 import java.util.Objects;
 
 public class CodeCommentsVisitor extends VoidVisitorAdapter<Void> {
-    HashSet<Comment> comments;
-   // List<Comment> comments;
+    //HashSet<Comment> comments;
+    List<Comment> comments;
     List<Comment> singleLineComments = new ArrayList<>();
 
     private String fileName;
     private String commit;
 
-    public CodeCommentsVisitor(String fileName, String commit, HashSet<Comment> comments) {
+    public CodeCommentsVisitor(String fileName, String commit, List<Comment> comments) {
         super();
         this.commit = commit;
         this.fileName = fileName;
@@ -35,7 +35,9 @@ public class CodeCommentsVisitor extends VoidVisitorAdapter<Void> {
            comment.setLineBegin(blockRange.begin.line);
            comment.setLineEnd(blockRange.end.line);
         });
-        comments.add(comment);
+        if (!comments.contains(comment)) { //todo here add check for time of previous comment
+            comments.add(comment);
+        }
     }
 
     @Override
@@ -49,7 +51,9 @@ public class CodeCommentsVisitor extends VoidVisitorAdapter<Void> {
         lc.getCommentedNode().ifPresent(commentedNode -> {
             comment.commentText = getWholeComment(commentedNode.toString());
         });
-        comments.add(comment);
+        if (!comments.contains(comment)) { //todo here add check for time of previous comment
+            comments.add(comment);
+        }
     }
 
     private String getWholeComment(String node) {
