@@ -25,7 +25,7 @@ import java.util.HashMap;
 import java.util.List;
 
 public class JGitUtils {
-    static int CHUNK = 100;
+    static int CHUNK = 400;
     public static List<String> checkedCommits = new ArrayList<>();
     public static boolean chunkSizeOverloaded = true;
 

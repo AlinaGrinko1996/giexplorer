@@ -30,23 +30,23 @@ public class Main {
                 while (JGitUtils.chunkSizeOverloaded) {
                     try {
                         commitFilesFilenames = JGitUtils.getAllFilesChangedInCommits(repositoryUrl);
+
+                        commitFilesFilenames.forEach((commit, fileAndContent) -> {
+                            fileAndContent.forEach((file, content) -> {
+                                List<Comment> comments = JavaParserUtils.getAddedComments(file, content, commit);
+                                if (!comments.isEmpty()) {
+                                    //  System.out.println(comments);
+                                    allComments.getAndAdd(comments.size());
+                                    int commentsFiltered = JavaParserUtils.filterForSATD(comments);
+                                    SATDComments.getAndAdd(commentsFiltered);
+
+                                    write(comments, outWriter);
+                                }
+                            });
+                        });
                     } catch (Exception e) {
                         e.printStackTrace();
                     }
-
-                    commitFilesFilenames.forEach((commit, fileAndContent) -> {
-                        fileAndContent.forEach((file, content) -> {
-                            List<Comment> comments = JavaParserUtils.getAddedComments(file, content, commit);
-                            if (!comments.isEmpty()) {
-                                //  System.out.println(comments);
-                                allComments.getAndAdd(comments.size());
-                                int commentsFiltered = JavaParserUtils.filterForSATD(comments);
-                                SATDComments.getAndAdd(commentsFiltered);
-
-                                write(comments, outWriter);
-                            }
-                        });
-                    });
                 }
             });
 
